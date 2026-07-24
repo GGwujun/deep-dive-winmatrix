@@ -340,7 +340,7 @@ CDW 模式的核心是**协调器（Coordinator）**——它像一个项目经�
 
 ## 11.5 Interactive：人机交互模式
 
-Interactive 模式（18 个文件）处理需要人类介入的场景：
+Interactive 模式（24 个文件）处理需要人类介入的场景：
 
 ```
 src/agents/core/agent/modes/interactive/

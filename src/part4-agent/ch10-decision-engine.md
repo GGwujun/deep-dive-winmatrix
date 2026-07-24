@@ -138,18 +138,23 @@ ExactRouter 不仅做字面匹配，还支持语义匹配，并通过 Gap 检查
 
 ```typescript
 // src/agents/core/agent/decision/stages/ExactRouter.ts（第 63-73 行）
-// semanticGapOk —— 使用 EXACT_ROUTER_SEMANTIC_TOP2_MIN_GAP 检查
-// boosted entries（@mention）获得放宽的阈值
-function semanticGapOk(top1Score: number, top2Score: number, isBoosted: boolean): boolean {
-  const gap = top1Score - top2Score;
-  const threshold = isBoosted
-    ? EXACT_ROUTER_SEMANTIC_TOP2_MIN_GAP * 0.5  // @mention 放宽
-    : EXACT_ROUTER_SEMANTIC_TOP2_MIN_GAP;
-  return gap >= threshold;
+// semanticGapOk —— 判别最高分与次高分是否拉开足够差距
+// 当 best 被 boost（如 @mention 命中）而 second 未被 boost 时，
+// 只要 second 与 best 的分差在 GAP 以内即可接受（允许 boosted 项略胜）
+function semanticGapOk(best: SemanticSkillHit, second: SemanticSkillHit | undefined): boolean {
+  if (!second) return true;
+  if (
+    best.boosted
+    && !second.boosted
+    && second.score - best.score <= EXACT_ROUTER_SEMANTIC_TOP2_MIN_GAP
+  ) {
+    return true;
+  }
+  return best.score - second.score >= EXACT_ROUTER_SEMANTIC_TOP2_MIN_GAP;
 }
 ```
 
-Gap 检查的逻辑是：如果最高分和次高分的差距太小，说明存在歧义，不应该贸然路由。
+Gap 检查的逻辑是：如果最高分和次高分的差距太小，说明存在歧义，不应该贸然路由；但若最高分项是被 @mention 等 boost 信号加持的，则允许它略胜未被 boost 的次高分。
 
 ## 10.4 Stage 3：FusionRouter
 
@@ -273,12 +278,12 @@ class RouteRegistry {
 
 ## 10.5 Stage 4：DecisionPlanner
 
-第四阶段是 LLM 辅助规划——前三个阶段都未命中时，调用 LLM 做复杂决策。这是整个管线中最复杂的组件（约 1258 行）。
+第四阶段是 LLM 辅助规划——前三个阶段都未命中时，调用 LLM 做复杂决策。这是整个管线中最复杂的组件（约 1090 行）。
 
 ```typescript
 // src/agents/core/agent/decision/stages/DecisionPlanner.ts（第 1-35 行）
 /**
- * 决策规划器 —— DecisionEngine Stage 4 的核心 LLM 规划组件（~1258 行）
+ * 决策规划器 —— DecisionEngine Stage 4 的核心 LLM 规划组件（~1090 行）
  *
  * 职责：
  * - Prompt 构建（system/user prompt，含 exactRouter 上下文、候选目录、技能快照）
@@ -370,11 +375,11 @@ const SEMANTIC_PLANNER_MAX_ENTRIES = 500;          // 最多 500 条
 一个精妙的设计是**动态槽位指纹**，防止跨任务复用：
 
 ```typescript
-// src/agents/core/agent/decision/SemanticPlannerCache.ts（第 20-39 行）
+// src/agents/core/agent/decision/SemanticPlannerCache.ts（第 14-18 行）
 interface SemanticPlannerInputFingerprintSnapshot {
   slotHash: string;
   hasDynamicSlots: boolean;
-  dynamicSlotSummary: string;
+  dynamicSlotSummary: Record<string, number>;
 }
 
 interface SemanticPlannerCanonicalRouteResult {
@@ -415,17 +420,13 @@ interface SemanticPlannerCanonicalRouteResult {
 DecisionEngine 还有一个特殊的预处理——检测用户是否显式要求流程编排：
 
 ```typescript
-// src/agents/core/agent/decision/DecisionEngine.ts（第 68-86 行）
-function isExplicitFlowOrchestrationInput(text: string): boolean {
-  // 匹配：流程编排、编排执行、按流程、多步骤、先...再...
-  return /流程编排|编排执行|按流程|多步骤|先.+再.+/.test(text);
-}
-
-function extractExplicitFlowStepDescriptions(text: string): string[] {
-  // 分割流程步骤，去重，最多 8 步
-  // ...
+// src/agents/core/agent/decision/DecisionEngine.ts（第 68-69 行）
+function isExplicitFlowOrchestrationInput(input: string): boolean {
+  return /(?:流程编排|编排执行|按流程|执行流程|多步骤|先.+再.+(?:最后|然后|并))/u.test(input);
 }
 ```
+
+注意「先...再...」后面必须跟「最后/然后/并」才算显式编排——单说"先分析再做"不算，"先分析再做，最后总结"才算。这避免了误判普通对话为流程编排。
 
 当用户说"先做需求分析，再做架构设计，最后写测试"时，系统识别这是显式流程编排，会走 Flow 编排路径而非普通的单步决策。
 
@@ -438,7 +439,7 @@ function extractExplicitFlowStepDescriptions(text: string): string[] {
 3. **ExactRouter**：@mention / /slash / 精确匹配，带语义 Gap 检查避免歧义
 4. **FusionRouter**：多信号加权融合（正则 0.9 + 意图 ±0.2/0.8 + 语义 0.6），影子模式安全发布
 5. **RouteRegistry**：DB 真源 + 30s TTL 刷新 + PCRE→JS 标志转换
-6. **DecisionPlanner**：1258 行的 LLM 规划器，Zod Schema + tool calling + 多层验证 + 重试
+6. **DecisionPlanner**：1090 行的 LLM 规划器，Zod Schema + tool calling + 多层验证 + 重试
 7. **SemanticPlannerCache**：embedding 最近邻复用（cos≥0.95），动态槽位指纹防跨任务复用
 8. **DecisionCommitmentDeriver**：LLM 概率输出 → 确定性执行计划
 9. **显式流程检测**：识别"先...再..."等编排意图

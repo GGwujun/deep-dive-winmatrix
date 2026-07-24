@@ -428,7 +428,7 @@ export class DigitalEmployeeRepositoryImpl implements IDigitalEmployeeRepository
 
 ### DI 容器：启动时注入
 
-依赖倒置的关键在于"谁来组装"。WinMatrix 使用自研的轻量 DI 容器（130 行代码）在启动阶段完成注入：
+依赖倒置的关键在于"谁来组装"。WinMatrix 使用自研的轻量 DI 容器（约 210 行代码）在启动阶段完成注入：
 
 ```typescript
 // src/infrastructure/di/Container.ts
@@ -494,7 +494,7 @@ export const container = getOrCreateGlobalContainer();
 
 这个容器的几个设计亮点：
 
-1. **轻量自研**：不依赖 inversify 等重型框架，130 行代码实现完整功能
+1. **轻量自研**：不依赖 inversify 等重型框架，约 210 行代码实现完整功能
 2. **进程级单例**：通过 `globalThis` 挂载，解决 dev 模式 `tsx watch` 热更新时模块重载导致容器分裂的问题
 3. **SWC 兼容**：字段初始化放在 constructor 而非类字段语法，规避 SWC 跨平台编译差异
 

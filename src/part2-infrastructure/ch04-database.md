@@ -2,11 +2,11 @@
 
 > "数据是系统的血液，数据库是系统的心脏。"
 
-WinMatrix 的核心数据存储基于 PostgreSQL + Prisma 7，121 个模型覆盖了从数字员工到 Agent 执行记录、从知识库到工作流编排的完整业务域。但持久化层不仅仅是数据库表的映射——它包含了自动恢复的连接池、双层缓存架构、分布式锁、乐观锁并发控制和事务编排。本章将从 Schema 设计出发，逐步深入持久化层的工程细节。
+WinMatrix 的核心数据存储基于 PostgreSQL + Prisma 7，123 个模型覆盖了从数字员工到 Agent 执行记录、从知识库到工作流编排的完整业务域。但持久化层不仅仅是数据库表的映射——它包含了自动恢复的连接池、双层缓存架构、分布式锁、乐观锁并发控制和事务编排。本章将从 Schema 设计出发，逐步深入持久化层的工程细节。
 
-## 4.1 Prisma Schema：121 个模型的组织哲学
+## 4.1 Prisma Schema：123 个模型的组织哲学
 
-WinMatrix 的数据库 Schema 定义在 `prisma/schema.prisma`（3057 行）中，包含约 121 个模型。这些模型按业务域可以划分为以下几个层次：
+WinMatrix 的数据库 Schema 定义在 `prisma/schema.prisma`（3133 行）中，包含 123 个模型。这些模型按业务域可以划分为以下几个层次：
 
 ### Generator 与 Datasource 配置
 
@@ -31,7 +31,7 @@ datasource db {
 
 ### 核心模型分类
 
-121 个模型按业务域组织如下：
+123 个模型按业务域组织如下：
 
 ```mermaid
 graph TB
@@ -114,7 +114,7 @@ graph TB
 ### 关键模型：DigitalEmployee
 
 ```prisma
-// prisma/schema.prisma（第 179-218 行）
+// prisma/schema.prisma（第 180 行起，节选关键字段）
 /// 数字化员工（模型 A：与 Role 一一对应）
 model DigitalEmployee {
   id                 String  @id
@@ -210,7 +210,7 @@ model agent_run {
 
 ## 4.2 Prisma Client：自动恢复的连接池
 
-`src/infrastructure/persistence/prisma/client.ts`（475 行）是整个系统数据库访问的核心。它不是一个简单的 Prisma Client 实例化，而是一个**自动恢复的代理对象**。
+`src/infrastructure/persistence/prisma/client.ts`（474 行）是整个系统数据库访问的核心。它不是一个简单的 Prisma Client 实例化，而是一个**自动恢复的代理对象**。
 
 ### 连接池配置
 
@@ -314,9 +314,9 @@ export const prisma = (globalForPrisma.prismaProxy ??
 
 WinMatrix 的仓储层是依赖倒置原则的经典实现。Domain 层定义接口（Port），Infrastructure 层提供实现（Adapter）。
 
-### 46 个仓储实现
+### 45 个仓储实现
 
-`src/infrastructure/persistence/repositories/` 目录包含 46 个仓储文件，覆盖所有业务域：
+`src/infrastructure/persistence/repositories/` 目录包含 45 个仓储文件（含少量类型/辅助文件），覆盖所有业务域：
 
 | 业务域 | 仓储实现 |
 |--------|---------|
@@ -786,9 +786,9 @@ scripts/seed-domain-packs.ts                    # 领域包种子
 
 本章深入分析了 WinMatrix 的数据库与持久化层：
 
-1. **Prisma Schema**：3057 行，121 个模型，按 10 个业务域组织，条件部分索引优化统计查询
-2. **自动恢复连接池**：475 行的 Prisma Client 封装，Proxy 代理 + Single-Flight 重建 + 时区 Bug 规避
-3. **46 个仓储实现**：Domain Port → Infrastructure Adapter，Prisma ORM + Raw SQL 混合
+1. **Prisma Schema**：3133 行，123 个模型，按 10 个业务域组织，条件部分索引优化统计查询
+2. **自动恢复连接池**：474 行的 Prisma Client 封装，Proxy 代理 + Single-Flight 重建 + 时区 Bug 规避
+3. **45 个仓储实现**：Domain Port → Infrastructure Adapter，Prisma ORM + Raw SQL 混合
 4. **L1 + Redis 双层缓存**：进程内 Map → Redis → DB 三级穿透，优雅降级，跨节点 Pub/Sub 失效
 5. **分布式锁双轨**：PG Advisory Lock（长任务互斥）+ Redis SET NX（快速互斥）
 6. **事务编排**：25 处 `$transaction`，涵盖交互式事务、悲观锁 `FOR UPDATE`、乐观锁 CAS

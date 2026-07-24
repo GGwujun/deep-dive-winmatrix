@@ -68,7 +68,7 @@ export const SYSTEM_SCHEDULED_TASKS: ScheduledTaskConfig[] = [
 |------|------|------|
 | **每分钟** | `system-reminder-delivery` | 提醒投递 |
 | **每 5 分钟** | `system-coding-task-timeout-sweep` | 编码任务超时 |
-| **每 10 分钟** | `system-llm-call-watchdog-sweeper` | LLM 调用看门狗 |
+| **每 10 分钟** | `system-llm-call-watchdog-sweeper`（interval 类型，非 cron） | LLM 调用看门狗 |
 | **每 3 小时** | `system-tfs-git-sync` | TFS/Git 同步 |
 | **每天 02:00** | `system-transcript-compact` | 转录压缩 |
 | **每天 02:50** | `system-route-rule-discovery` | 路由规则发现 |

@@ -43,7 +43,9 @@ WinMatrix 选择了 Fastify 5 而非更常见的 Express 或 NestJS。从 `src/i
 
 ```typescript
 // src/interface/core/app.ts
-export async function createApp(): Promise<import('fastify').FastifyInstance> {
+export async function createApp(
+  routeDependencies: ApiRouteDependencies,
+): Promise<import('fastify').FastifyInstance> {
   const server = Fastify({
     logger: true,
     bodyLimit: 50 * 1024 * 1024,  // 50MB

@@ -6,7 +6,7 @@
 
 ## 20.1 Flow 模板系统
 
-流程编排领域位于 `src/business/domain/flowOrchestration/`（47 个文件），是 WinMatrix 最复杂的业务域之一。
+流程编排领域位于 `src/business/domain/flowOrchestration/`（58 个文件），是 WinMatrix 最复杂的业务域之一。
 
 ### 数据模型
 
@@ -205,7 +205,7 @@ sequenceDiagram
 
 ## 20.4 Flow 编排服务
 
-`src/business/domain/flowOrchestration/` 包含 47 个文件，按功能分组：
+`src/business/domain/flowOrchestration/` 包含 58 个文件，按功能分组：
 
 ### 模板管理
 

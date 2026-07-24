@@ -325,7 +325,7 @@ export class CodingWorkstation extends BaseWorkstation implements ICodingWorksta
   async executeTask(
     workstationId: string,
     task: CodingTask,
-    onProgress: (progress: TaskProgress) => void,
+    onProgress?: (message: string) => void,
   ): Promise<CodingTaskResult> {
     // 在工作站内执行编码任务
     // workdir 通过 pathRegistry.toSandboxContainerPath() 解析

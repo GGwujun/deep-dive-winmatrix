@@ -53,10 +53,10 @@ LLM 消息的内容单元（TextBlock / ThinkingBlock / ToolCallBlock），支�
 六阶段渐进式决策管线，决定由谁、用什么方式、执行什么。
 
 **DecisionPlanner（决策规划器）**
-决策引擎第 4 阶段，使用 LLM 进行复杂决策（约 1258 行）。
+决策引擎第 4 阶段，使用 LLM 进行复杂决策（约 1090 行）。
 
 **DIContainer（依赖注入容器）**
-WinMatrix 自研的轻量 DI 容器（130 行），支持 Singleton/Transient 生命周期。
+WinMatrix 自研的轻量 DI 容器（约 210 行），支持 Singleton/Transient 生命周期。
 
 **DigitalEmployee（数字员工）**
 WinMatrix 的核心抽象，拥有角色、技能、工具、记忆的虚拟团队成员。

@@ -9,7 +9,7 @@
 数字员工的持久化定义在 `DigitalEmployee` Prisma 模型中：
 
 ```prisma
-// prisma/schema.prisma（第 179-218 行）
+// prisma/schema.prisma（第 180 行起，节选关键字段）
 /// 数字化员工（模型 A：与 Role 一一对应）
 model DigitalEmployee {
   id                 String  @id
@@ -90,15 +90,17 @@ WinMatrix 预定义了 7 个数字员工角色，构成一个完整的"项目团
 ```typescript
 // src/infrastructure/config/digitalEmployeeTeam.ts（第 16-24 行）
 export const DIGITAL_EMPLOYEE_TEAM: readonly DigitalEmployeeTeamMember[] = [
-  { id: 'architect',                name: 'Architector', nickname: 'Architector', isSystem: true },
-  { id: 'orchestrator',             name: '大福',         nickname: '大福' },
-  { id: 'process_manager',          name: '阿宁',         nickname: '阿宁' },
-  { id: 'product_design_manager',   name: '小品',         nickname: '小品' },
-  { id: 'tech_manager',             name: '阿码',         nickname: '阿码' },
-  { id: 'sre_manager',              name: '大维',         nickname: '大维' },
-  { id: 'quality_manager',          name: '小质',         nickname: '小质' },
-];
+  { id: 'architect', name: 'architect', nickname: 'Architector', isSystem: true },
+  { id: 'orchestrator', name: 'orchestrator', nickname: '大福' },
+  { id: 'process_manager', name: 'process_manager', nickname: '阿宁' },
+  { id: 'product_design_manager', name: 'product_design_manager', nickname: '小品' },
+  { id: 'tech_manager', name: 'tech_manager', nickname: '阿码' },
+  { id: 'sre_manager', name: 'sre_manager', nickname: '大维' },
+  { id: 'quality_manager', name: 'quality_manager', nickname: '小质' },
+] as const;
 ```
+
+注意区分 `id`/`name`/`nickname` 三个字段：`id` 与 `name` 都是小写的角色标识（如 `orchestrator`），`nickname` 才是中文昵称（如 `大福`）。`architect` 角色标记 `isSystem: true`，是系统内部角色。
 
 ```mermaid
 graph TB
@@ -166,41 +168,50 @@ export function isTaskTypeDisallowedForDigitalEmployee(taskType: TaskTypeForAssi
 每个角色对应一个 `Role` 类，继承自 `BaseRole`。以"大福"为例：
 
 ```typescript
-// src/agents/domain-harness/roles/OrchestratorRole.ts（第 1-49 行）
-/**
- * 大福角色 (OrchestratorRole) — 项目总指挥，
- * 负责项目规划、WBS编制、任务分解和分配
- */
-
+// src/agents/domain-harness/roles/OrchestratorRole.ts（第 17-49 行）
 const ORCHESTRATOR_ROLE_ID = 'orchestrator';
 
 /**
- * 大福角色
- * - 项目规划：制定项目整体计划和里程碑
- * - WBS编制：将项目分解为可执行的任务
- * - 任务分配：根据团队成员能力分配任务
- * - 进度监控：跟踪任务执行情况
+ * 大福角色实现
+ *
+ * 核心职责：
+ * - 项目规划：制定项目整体计划，分解任务
+ * - WBS编制：创建工作分解结构
+ * - 任务分配：将任务分配给合适的团队成员
+ * - 进度监控：跟踪项目整体进度
  */
-class OrchestratorRole extends BaseRole {
+export class OrchestratorRole extends BaseRole {
+  readonly name: string;
+  readonly profile: string;
+  readonly goal: string;
+  readonly constraints: string;
+  readonly nickname: string;
+
   constructor() {
-    super(ORCHESTRATOR_ROLE_ID, loadOrchestratorConfig());
-    this.profile = '项目总指挥';
-    this.goal = '制定项目计划，分解任务，分配资源，确保项目顺利推进';
-    this.constraints = '全局视野、系统思维、优先级明确、风险意识、协作优先';
-    this.nickname = '大福';
-    this.reactMode = RoleReactMode.REACT;
+    // reactMode 通过 super 传入，而非字段赋值
+    super({
+      reactMode: RoleReactMode.REACT,
+      watch: [],
+    });
+
+    // 从配置管理器动态加载，带 fallback 默认值
+    const agentConfig = this.loadOrchestratorConfig();
+    this.name = ORCHESTRATOR_ROLE_ID;
+    this.profile = agentConfig?.role || '项目总指挥';
+    this.goal = agentConfig?.description || '制定项目计划，分解任务，分配资源，确保项目顺利推进';
+    this.constraints = agentConfig?.focus || '全局视野、系统思维、优先级明确、风险意识、协作优先';
+    this.nickname = agentConfig?.nickname || '大福';
+
+    this.onInitialized();
   }
 
-  initializeActions() {
-    // 格式化原则和个性
-    const principles = this.formatPrinciples();
-    const personality = this.formatPersonality();
+  protected async initializeActions(userPermissions?: string[]): Promise<void> {
+    await super.initializeActions(userPermissions);
 
-    // 注册 chat_only LLMAction
-    this.addAction(new LLMAction({
-      type: 'chat_only',
-      buildPrompt: (text: string) => `用户说：${text}`,
-    }));
+    const agentConfig = this.loadOrchestratorConfig();
+    const principles = Array.isArray(agentConfig?.principles) ? agentConfig.principles : [];
+    const personality = Array.isArray(agentConfig?.personality) ? agentConfig.personality : [];
+    // ... 注册 chat_only LLMAction 等
   }
 }
 ```
@@ -215,26 +226,26 @@ class OrchestratorRole extends BaseRole {
 
 ### 阿宁的实现
 
+其他角色（如阿宁 `ProcessManagerRole`）遵循与大福相同的模式：构造函数中通过 `super({ reactMode, watch })` 传入反应模式，再从配置管理器动态加载 `profile/goal/constraints/nickname`（带 fallback 默认值），并在 `protected async initializeActions()` 中注册 `chat_only` 等 LLMAction。
+
 ```typescript
-// src/agents/domain-harness/roles/ProcessManagerRole.ts（第 25-48 行）
-/**
- * 阿宁角色
- * - 进度跟踪：基于 WBS 监控任务进度
- * - 日会管理：组织每日站会
- * - 周报生成：汇总周度进展
- * - 风险预警：识别并预警项目风险
- */
+// src/agents/domain-harness/roles/ProcessManagerRole.ts（结构示意，与大福同构）
 class ProcessManagerRole extends BaseRole {
+  // readonly name/profile/goal/constraints/nickname
+
   constructor() {
-    super(PROCESS_MANAGER_ROLE_ID, loadConfigFromManager('process_manager'));
-    this.profile = '项目过程管理者';
-    this.goal = '监控项目健康，促进团队协作，确保项目按计划推进';
-    this.constraints = '主动监控、及时预警、客观公正、建设性、沟通优先';
-    this.nickname = '阿宁';
+    super({ reactMode: RoleReactMode.REACT, watch: [] });
+    const agentConfig = this.loadConfigFromManager('process_manager');
+    this.name = PROCESS_MANAGER_ROLE_ID;
+    this.profile = agentConfig?.role || '项目过程管理者';
+    this.goal = agentConfig?.description || '监控项目健康，促进团队协作，确保项目按计划推进';
+    this.constraints = agentConfig?.focus || '主动监控、及时预警、客观公正、建设性、沟通优先';
+    this.nickname = agentConfig?.nickname || '阿宁';
+    this.onInitialized();
   }
 
-  initializeActions() {
-    // chat_only 动作，带角色提示词回退
+  protected async initializeActions(userPermissions?: string[]) {
+    // chat_only 动作，带角色提示词回退（resolveRoleSystemPrompt）
     this.addAction(new LLMAction({
       type: 'chat_only',
       buildPrompt: (text) => resolveRoleSystemPrompt(this) 

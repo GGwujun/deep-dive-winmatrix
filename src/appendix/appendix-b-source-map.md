@@ -90,7 +90,7 @@
 | `src/agents/core/agent/decision/route-registry.ts` | 路由规则注册表 |
 | `src/agents/core/agent/decision/SemanticPlannerCache.ts` | 语义缓存 |
 | `src/agents/core/agent/decision/stages/ExactRouter.ts` | Stage 2 |
-| `src/agents/core/agent/decision/stages/DecisionPlanner.ts` | Stage 4（1258 行） |
+| `src/agents/core/agent/decision/stages/DecisionPlanner.ts` | Stage 4（1090 行） |
 
 ### Turn 执行
 
@@ -162,7 +162,7 @@
 
 | 文件 | 职责 |
 |------|------|
-| `src/infrastructure/persistence/prisma/client.ts` | Prisma Client（475 行，自动恢复） |
+| `src/infrastructure/persistence/prisma/client.ts` | Prisma Client（474 行，自动恢复） |
 | `src/infrastructure/persistence/database/bullmqConnections.ts` | BullMQ 双连接 |
 | `src/infrastructure/persistence/database/RedisConnectionManager.ts` | Redis 连接管理 |
 | `src/infrastructure/persistence/advisoryLock.ts` | PG Advisory Lock |
@@ -216,7 +216,7 @@
 
 | 文件 | 职责 |
 |------|------|
-| `src/infrastructure/di/Container.ts` | DI 容器（130 行） |
+| `src/infrastructure/di/Container.ts` | DI 容器（211 行） |
 
 ### 沙箱
 

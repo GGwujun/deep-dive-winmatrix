@@ -2,23 +2,22 @@
 
 > "工具让 Agent 从'能想'变为'能做'。"
 
-数字员工通过工具与外部世界交互——读写文档、查询 TFS、发送企微消息、执行 SQL。WinMatrix 的工具系统包含 29 个业务工具域，通过自动注册、统一上下文和权限检查构建了一条完整的执行管线。本章将深入这些实现。
+数字员工通过工具与外部世界交互——读写文档、查询 TFS、发送企微消息、执行 SQL。WinMatrix 的工具系统包含 25 个业务工具域（通过 `autoRegister.ts` 懒加载注册），通过自动注册、统一上下文和权限检查构建了一条完整的执行管线。本章将深入这些实现。
 
-## 14.1 29 个业务工具域
+## 14.1 业务工具域
 
-`src/business-tools/` 目录包含 29 个工具域：
+`src/business-tools/` 目录下的工具域模块（含 `index.ts` 导出 `registerTools` 的目录）：
 
 ```
 src/business-tools/
-├── autoRegister.ts          # 自动注册入口
-├── base/                     # 基础接口
+├── autoRegister.ts          # 自动注册入口（25 个模块懒加载）
+├── base/                     # 基础接口（BaseTool、IToolRegistry）
 ├── command/                  # 命令执行
 ├── document/                 # 文档管理
 ├── email/                    # 邮件
 ├── image/                    # 图像处理
 ├── interaction/              # 交互
 ├── kdocs/                    # 知识库文档
-├── knowledgeBase/            # 知识库
 ├── mcp/                      # MCP 外部集成
 ├── member/                   # 成员管理
 ├── memory/                   # 记忆
@@ -30,7 +29,6 @@ src/business-tools/
 ├── scheduled/                # 定时任务
 ├── session/                  # 会话管理
 ├── shared/                   # 共享工具
-├── skill/                    # 技能管理
 ├── sql/                      # SQL 查询
 ├── task/                     # 任务管理
 ├── tfs/                      # TFS/Azure DevOps
@@ -42,39 +40,50 @@ src/business-tools/
 └── workstation/              # 编码工作站
 ```
 
+> 注：知识库（KnowledgeBase）与技能（Skill）相关的领域逻辑位于 `src/business/domain/` 下，不在 `business-tools/` 工具域目录中。
+
 ## 14.2 自动注册：懒加载
 
 工具通过 `autoRegister.ts` 懒加载注册：
 
 ```typescript
-// src/business-tools/autoRegister.ts（第 18-44 行）
+// src/business-tools/autoRegister.ts（第 17-44 行）
+/** 所有工具模块的懒加载入口 */
 const TOOL_MODULES: Array<() => Promise<ToolModule>> = [
   () => import('@/business-tools/project/index.js'),
   () => import('@/business-tools/task/index.js'),
   () => import('@/business-tools/document/index.js'),
-  () => import('@/business-tools/email/index.js'),
-  () => import('@/business-tools/image/index.js'),
-  () => import('@/business-tools/interaction/index.js'),
-  () => import('@/business-tools/kdocs/index.js'),
-  () => import('@/business-tools/knowledgeBase/index.js'),
+  () => import('@/business-tools/command/index.js'),
   () => import('@/business-tools/member/index.js'),
-  () => import('@/business-tools/memory/index.js'),
   () => import('@/business-tools/notification/index.js'),
-  () => import('@/business-tools/orchestration/index.js'),
-  () => import('@/business-tools/rag/index.js'),
-  () => import('@/business-tools/scheduled/index.js'),
+  () => import('@/business-tools/email/index.js'),
+  () => import('@/business-tools/workflow/index.js'),
+  () => import('@/business-tools/memory/index.js'),
+  () => import('@/business-tools/web/index.js'),
   () => import('@/business-tools/session/index.js'),
-  () => import('@/business-tools/skill/index.js'),
+  () => import('@/business-tools/workstation/index.js'),
+  () => import('@/business-tools/scheduled/index.js'),
   () => import('@/business-tools/sql/index.js'),
   () => import('@/business-tools/tfs/index.js'),
-  () => import('@/business-tools/web/index.js'),
-  () => import('@/business-tools/wecom-contact/index.js'),
   () => import('@/business-tools/wecom-document/index.js'),
   () => import('@/business-tools/wecom-schedule/index.js'),
-  () => import('@/business-tools/workflow/index.js'),
-  () => import('@/business-tools/workstation/index.js'),
+  () => import('@/business-tools/wecom-contact/index.js'),
+  () => import('@/business-tools/rag/index.js'),
+  () => import('@/business-tools/mcp/index.js'),
+  () => import('@/business-tools/image/index.js'),
+  () => import('@/business-tools/meta/index.js'),
+  () => import('@/business-tools/interaction/index.js'),
+  () => import('@/business-tools/orchestration/index.js'),
   () => import('@/business-tools/kdocs/index.js'),
 ];
+
+// 自动加载并注册所有域模块的工具
+export async function autoRegisterTools(registry: IToolRegistry): Promise<void> {
+  const modules = await Promise.all(TOOL_MODULES.map((fn) => fn()));
+  for (const mod of modules) {
+    await mod.registerTools(registry);
+  }
+}
 ```
 
 懒加载的好处：
@@ -321,7 +330,7 @@ await crossAgentCallRegistry.register({
 
 本章深入分析了 WinMatrix 的工具执行系统：
 
-1. **29 个业务工具域**：从文档到企微，从 TFS 到 SQL
+1. **25 个业务工具域**：从文档到企微，从 TFS 到 SQL
 2. **懒加载自动注册**：25 个模块按需加载，优化启动性能和内存
 3. **ToolRegistry**：统一管理工具元数据和执行
 4. **执行管线**：权限检查 → 参数验证 → 上下文注入 → 执行 → 结果处理 → 轨迹记录

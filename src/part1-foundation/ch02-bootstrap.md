@@ -165,7 +165,7 @@ void startApi();
 2. **信号处理注册**：fatal 处理器（uncaughtException / unhandledRejection）+ shutdown 信号处理器（SIGINT / SIGTERM）
 3. **启动执行**：调用 `startApi()` —— 实际的五阶段启动管线
 
-而 `startApi()` 在 `src/startup/api.ts` 中定义（第 507-542 行）：
+而 `startApi()` 在 `src/startup/api.ts` 中定义（第 533-568 行）：
 
 ```typescript
 // src/startup/api.ts
@@ -384,7 +384,7 @@ for (const svc of services) {
 
 ### 阶段 3 扩展：BullMQ Worker 启动（仅 dev）
 
-在开发模式（all-in-one）下，`initAgents()` 在 `initAgentStack()` 之后还会启动 11 种 Worker：
+在开发模式（all-in-one）下，`initAgents()` 在 `initAgentStack()` 之后还会启动多个 BullMQ Worker 和恢复扫描器（详见第 5、23 章）：
 
 ```typescript
 // src/index.ts（第 83-174 行，关键 Worker 启动）
@@ -420,7 +420,7 @@ startTfsQueryExportWorker();       // TFS/Azure DevOps 数据同步
 `initRagAndPlugins()` 负责注册 Fastify 的插件栈和路由。它构建了系统最外层的请求处理管线：
 
 ```typescript
-// src/startup/api.ts（第 90-423 行，关键插件注册顺序）
+// src/startup/api.ts（第 101 行起，关键插件注册顺序）
 export async function initRagAndPlugins(): Promise<void> {
   // 0) Prometheus 指标
   await apiServer.register(metricsPlugin, { endpoint: '/metrics' });
@@ -514,7 +514,7 @@ export async function initRagAndPlugins(): Promise<void> {
 当所有插件和路由注册完成后，`startListening()` 启动 HTTP 服务器并输出启动信息：
 
 ```typescript
-// src/startup/api.ts（第 426-506 行）
+// src/startup/api.ts（第 452 行起）
 export async function startListening(startupStartTime: number): Promise<void> {
   logger.info(`[Startup] 启动 HTTP 服务器 (端口: ${config.port}, 基础路径: ${basePath})...`);
   const listenStart = Date.now();
@@ -579,7 +579,9 @@ sequenceDiagram
     SIG->>EXIT: gracefulExit(0)
 ```
 
-### 三阶段关闭序列
+### 三阶段关闭序列（all-in-one 模式）
+
+> 注：以下三阶段序列（含 `shutdownScheduledWorkers`）是 `index.ts` **all-in-one 开发模式**的 `shutdown()` 实现。生产环境的 API 进程（`shutdownApi()`）不启动 scheduled workers，因此**只执行 `shutdownApiPrefix` + `sharedTeardown` 两阶段**，不调用 `shutdownScheduledWorkers`。
 
 从源码可以看到完整的关闭编排：
 
@@ -717,7 +719,7 @@ updateProcessStateMetric('running');
 4. **角色特化**：`common.ts` 为每个 init 函数提供角色特化版本，RAG 角色跳过 LLM Provider Registry
 5. **MCP 工具同步**：启动时自动将 MCP 服务的 assigned_agents 同步到 agent_tool 表，保证一致性
 6. **Role 工厂模式**：7 个角色通过 registry.registerFactory 延迟创建，支持按需实例化
-7. **15+ 种 Worker 的差异化启动**：Dev 模式下启动全部 Worker，每个 Worker 包含恢复扫描
+7. **Worker 的差异化启动**：Dev 模式下启动全部 8 种 Worker（见第 5/23 章），每个 Worker 包含恢复扫描
 8. **12 层插件管线的有序注册**：从 CORS 到 RateLimit，顺序经过精心设计
 9. **三阶段关闭序列**：API Prefix → Scheduled Workers → Shared Teardown，每步有超时保护
 10. **双信号机制**：首次信号优雅关闭，二次信号强制退出

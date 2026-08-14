@@ -42,14 +42,14 @@ WinMatrix（翠花）是一个企业级 AI 数字员工协作平台 —— 在�
 
 ## 配套文集：开发经验 70 篇（适合微信公众号阅读）
 
-除了这本源码深读书，仓库里还有一组 **70 篇独立成文、手机端友好**（无 Mermaid，全 ASCII 图/表格）的开发经验总结，位于 [`articles/`](./articles/README.md)。从全书提炼，覆盖四个方向：
+除了这本源码深读书，仓库里还有一组 **70 篇独立成文、手机端友好**（无 Mermaid，全 ASCII 图/表格）的开发经验总结，位于 [`src/articles/`](./src/articles/README.md)。从全书提炼，覆盖四个方向：
 
 - **平台工程实战**（01-05, 11-15, 17, 20, 41-50）：Turn 引擎、决策、记忆、流式、工具治理、编码工作站、MCP、配置热更、构建部署、知识库 pipeline、人格/路由/分诊/执行模式/调度器等子模块
 - **企业级 AI 落地**（06-08, 21-22, 29, 59-65）：技能治理、多 Agent 协作、可观测性、企微集成、PMDOC、成本治理、多租户、凭证、审计、背压、版本化、停机、健康检查
 - **跨模块横切主题**（23-30, 51-58）：幂等、分布式锁、降级、并发、Context Engineering、安全护栏、热更新、终态收敛、确定性、可重放、透明代理、配置即数据
 - **行业对比 / 踩坑复盘**（09-10, 31-40, 66-70）：对比 Anthropic/K8s Agent Sandbox/LangGraph/Langfuse 等业界方案 + 真实事故根因 + 全系列终章
 
-完整目录与阅读路线见 [`articles/README.md`](./articles/README.md)。
+完整目录与阅读路线见 [`src/articles/README.md`](./src/articles/README.md)。
 
 ## License
 

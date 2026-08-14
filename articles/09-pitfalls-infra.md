@@ -96,7 +96,7 @@ async function rebuildPrismaResources(reason: unknown): Promise<void> {
   try {
     await globalForPrisma.prismaRebuildInFlight;
   } finally {
-    globalForPrisma.prismaRebuildInFlight = null;
+    globalForPrisma.prismaRebuildInFlight = undefined;
   }
 }
 ```

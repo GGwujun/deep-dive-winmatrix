@@ -73,7 +73,7 @@ model external_agent_registration {
   userId            String
   agentType         String    // Claude Code / Hermes / OpenClaw
   name              String
-  capabilities      String[]
+  capabilities      Json?       // 能力声明（流式/工具调用/取消等，结构化）
   apiKeyHash        String    // hash 存储
   apiKeyEncrypted   String    // 加密存储
   isConnected       Boolean
@@ -108,7 +108,7 @@ hostname          String
 os                String      // 操作系统
 arch              String      // 架构
 daemonVersion     String
-detectedRuntimes  String[]    // 检测到的运行时
+detectedRuntimes  Json?       // 检测到的运行时（结构化，如 Node/Python 版本等）
 supportedAgentTypes String[]  // 支持哪些 Agent 类型
 isConnected       Boolean
 ```

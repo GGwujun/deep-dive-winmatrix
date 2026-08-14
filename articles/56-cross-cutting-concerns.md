@@ -48,7 +48,7 @@ WinMatrix 的做法是 **Prisma Proxy**（`createPrismaProxy`，`client.ts:334-3
               ├── isRecoverablePrismaPoolError(err)？
               ├── single-flight rebuildPrismaResources()
               ├── shouldReplayAfterPrismaRebuild(method)？
-              │     ├── 只读方法（findMany 等 9 种）→ 重放一次
+              │     ├── 只读方法（findMany / findUnique / aggregate / count / $queryRaw 等 11 种）→ 重放一次
               │     └── 写方法 → 抛错（不重放）
               └── 重建失败 → 抛错
 ```
@@ -143,10 +143,11 @@ WinMatrix 在这一层收口的横切逻辑包括（核实报告 ch04-06）：
 WinMatrix 的做法是 **pipeline hooks**（`DecisionEngine.ts`，核实报告 ch09-12）：
 
 ```ts
-// DecisionEngine 构造时接收 hooks: PipelineHook[]
+// DecisionEngine 构造时接收 hooks: PipelineHook[]（位置参数，非解构）
+// exactRouter / fusionRouterStage / quickAcceptGate 等是构造时注入的私有字段
 export class DecisionEngine {
-  constructor({ exactRouter, fusionRouterStage, ..., hooks }: { hooks: PipelineHook[] }) {
-    this.hooks = hooks;
+  constructor(exactRouter, fusionRouterStage, quickAcceptGate, decisionPlanner, commitmentDeriver, simpleChatGuard, hooks: PipelineHook[] = []) {
+    // 各阶段组件与 hooks 均保存为私有字段
   }
 
   private async decideInner(input): Promise<DecisionResult> {

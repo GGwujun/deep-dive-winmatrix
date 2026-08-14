@@ -133,19 +133,24 @@ export async function shutdownScheduledWorkers(options?): Promise<void> {
   await safeStep('stopWorkstationTaskQueueDispatcher', stopWorkstationTaskQueueDispatcher, 2_000);
   await safeStep('closeKickoffJobWorker', closeKickoffJobWorker, 3_000);
   await safeStep('closeCrossAgentTriggerWorker', closeCrossAgentTriggerWorker, 3_000);
-  // ... 共 20+ 个 safeStep
-  await safeStep('closeScheduledTaskWorker', closeScheduledTaskWorker, 30_000);   // 主队列给 30 秒
-  // ...
+  // ... 各种 scanner 和 worker 的 safeStep
+  // 注意：leader 锁在这里（主队列 worker 关闭之前）释放
   {
+    const { stopScheduledSyncLeaderRenewal, releaseScheduledSyncLeader } = await import(
+      '@/infrastructure/scheduled/scheduledSyncLeader.js'
+    );
     stopScheduledSyncLeaderRenewal();
-    await releaseScheduledSyncLeader();           // 释放 leader 锁
+    await releaseScheduledSyncLeader();           // 先释放 leader 锁
   }
+  await safeStep('closeScheduledTaskWorker', closeScheduledTaskWorker, 30_000);   // 再关主队列 worker（给 30 秒）
 }
 ```
 
 几个设计要点：
 
-**顺序有讲究**。先停 scanner（扫描器，主动 poll 的）→ 再停 worker（被动消费的）→ 最后释放 leader 锁。因为 scanner 可能给 worker 投活，先停 scanner 避免"停了又来新活"。leader 锁最后释放——只要 leader 还在，定时任务的调度就还能收敛，等 worker 都停干净了再让出 leader 身份。
+**顺序有讲究**。先停 scanner（扫描器，主动 poll 的）→ 再停其他 worker（被动消费的）→ **释放 leader 锁** → 最后关主队列 worker（closeScheduledTaskWorker）。因为 scanner 可能给 worker 投活，先停 scanner 避免"停了又来新活"。
+
+注意 leader 锁**不是最后释放，而是在主队列 worker 关闭之前就释放**——这和"先建新后关旧"是同一个思路：本实例已经决定要停了，就尽早让出 leader 身份，让别的实例立刻接手定时任务的调度权，而不是等本实例把所有 worker 都慢腾腾关完（主队列 worker 给了 30 秒）才放手。如果 leader 锁放到最后，这 30 秒里集群没有 leader，定时任务的注册/调度会断档。**主动早释放，把停机对调度的影响从"等我这台完全退出"降到接近 0。**
 
 **超时逐个不同**。scanner 给 2 秒（轻量，扫一下就退），普通 worker 给 3-5 秒，scheduledTaskWorker 给 30 秒（主队列，可能在跑长任务）。**超时长的说明那个步骤值得等，超时短的是"差不多就该退了"**。
 
@@ -163,7 +168,7 @@ export async function safeStep(label: string, fn: () => Promise<unknown>, ms: nu
 
 **任何一步卡住或报错，不阻塞后续步骤**。这是停机序列的韧性——不能因为一个 worker 的 close 卡死，整个进程都退不出去。超时跳过，继续下一步，最坏情况是那个 worker 的 job 留 active 状态等启动时 reconcile（第 37 篇的孤儿任务回收兜底）。
 
-**释放 leader 锁**（行 63-68）：
+**leader 锁的两步释放**（行 62-67）：
 
 ```ts
 const { stopScheduledSyncLeaderRenewal, releaseScheduledSyncLeader } = await import(
@@ -173,7 +178,7 @@ stopScheduledSyncLeaderRenewal();      // 停续租
 await releaseScheduledSyncLeader();    // 主动释放锁
 ```
 
-这两步很关键：先停续租（不再 renew fence），再主动 release。如果不主动释放，别的实例要等锁 TTL（120 秒）过期才能接手 leader。主动 release 让别的实例立刻能抢，停机对调度的影响从 120 秒降到接近 0。
+这两步很关键：**先停续租（不再 renew fence），再主动 release**。顺序不能反——如果先 release，续租定时器可能在那极短的窗口里又抢回来。如果不主动 release 而是等 TTL 自然过期，别的实例要等锁 TTL（120 秒）才能接手 leader。主动 release 让别的实例立刻能抢，停机对调度的影响从 120 秒降到接近 0。
 
 ---
 
@@ -356,7 +361,7 @@ export async function withTimeout<T>(label: string, p: Promise<T>, ms: number): 
 2. **第一步是标 shutting_down 让 readiness 摘流**。processState 改成 shutting_down，探针返 503，新流量不再进来。
 3. **两次信号机制是逃生舱**。第一次触发优雅停机，第二次强制 process.exit(1)。防优雅停机卡死。
 4. **HTTP 先 close 再 flush 审计**。server.close 等已有请求完（5s 超时），之后 flushPendingSpans 补全审计中断记录。顺序不能反。
-5. **worker 按依赖顺序清理**。先停 scanner（不再投活）→ 再停 worker → 最后释放 leader 锁（让别人立刻接手）。
+5. **worker 按依赖顺序清理**。先停 scanner（不再投活）→ 再停其他 worker → 释放 leader 锁（让别人立刻接手调度）→ 最后关主队列 worker（给 30 秒收尾）。leader 锁在主队列 worker 关闭前就释放，避免本实例慢腾腾退出期间集群断档。
 6. **主动释放锁，别等 TTL**。scheduledSyncLeader 主动 release，影响从 120s 降到 0；role_inbox 靠 TTL 兜底。
 7. **safeStep 是韧性核心**。每步带超时、超时跳过、异常跳过、继续下一步。一个卡住不阻塞全序列。超时逐个配（scanner 2s、worker 3-5s、主队列 30s）。
 8. **停机不丢任务，靠延迟重投 + 启动 reconcile 双保险**。BullMQ active job 等 visibility timeout 重新投递；启动时 reconcileStaleRunsOnBootstrap 收敛滞留 running 状态。

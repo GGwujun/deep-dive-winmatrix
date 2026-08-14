@@ -20,7 +20,7 @@ model mcp_services {
   project_id      String?
   name            String
   description     String?
-  transport_type  String   @map("transport_type")  // stdio | sse | http
+  transport_type  String   @map("transport_type")  // sse | http
   url             String?
   api_key         String?
   headers         Json?
@@ -34,7 +34,7 @@ model mcp_services {
 
 几个字段值得注意，它们决定了"外部工具怎么被消费"：
 
-- **`transport_type`**。MCP 支持三种传输：stdio（本地子进程）、sse（服务端推送）、http。一个 MCP server 可以是本地装的 CLI（stdio），也可以是远程 HTTP 服务。transport_type 决定了怎么连。
+- **`transport_type`**。MCP 支持两种传输：sse（服务端推送）、http。transport_type 决定了怎么连这个 MCP server。
 - **`tool_whitelist`（工具白名单）**。一个 MCP server 可能暴露几十个工具，但你未必都想暴露给 Agent。白名单过滤——只把白名单里的工具纳入 Agent 的工具集。
 - **`assigned_agents`（分配给哪些 Agent）**。多租户的关键：同一个 MCP server，可以分配给项目 A 的 Agent，但不给项目 B。这是"工具的可见性是按租户控制的"。
 - **`project_id`**。MCP 服务可以挂在项目级别（项目私有），也可以全局可用（project_id 为空）。这是另一个维度的可见性控制。

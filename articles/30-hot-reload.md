@@ -54,19 +54,19 @@ ConfigDbListener 的连接、去重、防抖三个设计值得一说。
 
 **独立 pg.Client**。它不用连接池，而是一个独立的 `pg.Client`（见 `connect()` 第 209-236 行）。原因是 LISTEN 是长连接语义——这条连接必须一直活着，才能持续收到 NOTIFY。连接池会回收连接，不适合。
 
-**500ms 防抖**。一次配置变更可能触发多条 NOTIFY（比如批量更新多个角色）。如果每条都立刻处理，会造成"抖动"——刚处理完 A，又来一条 A，又处理一遍。我们的做法是收到 NOTIFY 后放进 `pendingChanges` Map，等 500ms 没有新通知了再批量处理：
+**500ms 防抖**。一次配置变更可能触发多条 NOTIFY（比如批量更新多个角色）。如果每条都立刻处理，会造成"抖动"——刚处理完 A，又来一条 A，又处理一遍。我们的做法是收到 NOTIFY 后放进 `pendingChanges` Map，每次来新通知都重置一个 500ms 定时器，等 500ms 没有新通知了再批量处理：
 
 ```typescript
 // ConfigDbListener.ts（第 336-345 行）
 private scheduleDebounce(): void {
-  // 500ms 防抖合并
-  if (this.debounceTimer) return;
-  this.debounceTimer = setTimeout(() => {
-    this.flushPendingChanges();
-    this.debounceTimer = null;
-  }, 500);
+  clearTimeout(this.debounceTimer);              // 每次都先清掉旧定时器（重设，而非"已有就跳过"）
+  this.debounceTimer = setTimeout(async () => {
+    await this.processPendingChanges();          // 批量处理攒下的变更
+  }, this.options.debounceMs);                   // 默认 500ms，可配置
 }
 ```
+
+注意两个细节：定时器是 `clearTimeout` 后**重设**（保证最后一次通知后再等 500ms），而不是"已有定时器就 return"——后者会把窗口内后续的变更漏掉；防抖时长用可配置的 `this.options.debounceMs`（默认 500），不是硬编码。
 
 **Map 去重**。同一个配置项在防抖窗口内被改多次，只处理最后一次。`pendingChanges` 是个 Map，key 是 `${type}:${id}`，后到的覆盖先到的：
 

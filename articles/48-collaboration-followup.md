@@ -26,7 +26,7 @@ role_inbox（Interactive role durable inbox）
 ├── conversation_id     会话
 ├── event_type / payload
 ├── idempotency_key     ← 幂等键（防重复入队）
-├── status              pending / claimed / running / done / failed
+├── status              queued（默认）→ claimed → observing → thinking → acting → publishing →（终态）failed
 ├── claim_owner         ← 抢占者
 ├── claim_expires_at    ← 租约过期时间
 ├── retry_count / max_retries

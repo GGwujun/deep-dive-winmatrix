@@ -38,7 +38,7 @@ WinMatrix 入库的配置不是一两个开关，而是**四大类配置，每�
 
 | 配置表 | 管什么 | 关键字段 | 源码 |
 |--------|--------|---------|------|
-| **agent_config** | 数字员工的身份与人格 | name_cn/nickname/emoji/personality/principles/role/focus/workstation | schema.prisma:1159-1181 |
+| **agent_config** | 数字员工的身份与人格 | name_cn/name_en/nickname/emoji/description/role/focus/workstation/workstation_config_version | schema.prisma:1159-1181 |
 | **skill_artifact** | 技能定义（提示词+工具+契约） | name/version/scope/trust_level/manifest/persona_eligible/package_sha256 | schema.prisma:1273-1305 |
 | **tool_config** | 工具元数据与展示 | name/category/scope/permissions/dependencies/mcp_bridge_visible | schema.prisma:1437-1453 |
 | **route_rule** | 智能路由规则 | patterns/positiveIntents/semanticAnchors/semanticThreshold/roleId/status(active\|shadow) | schema.prisma:2689-2730 |

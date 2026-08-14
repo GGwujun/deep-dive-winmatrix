@@ -115,33 +115,31 @@ token 是一次性的：任务一旦终态（completed/failed），这个 token 
 
 ---
 
-## 第四道防线：partial unique index 复用 session
+## 第四道防线：partial index 锁定可复用的成功 session
 
 编码任务有一个很值钱的资源：**Claude session**。claude_code 引擎在一个 session 里跑，session 里会积累上下文（读过的文件、之前的对话）。如果每次重试都开新 session，上下文全丢，引擎要重新读一遍代码——又慢又贵。
 
 理想情况是：**重试时尽量复用上次的 session**。但"复用"有风险——你不能无脑复用，否则一个跑崩了的 session 被反复重用，永远跑不出来。
 
-WinMatrix 用一个 **partial unique index** 精确控制了"什么情况下可以复用 session"：
+WinMatrix 在 `CodingTask` 上建了一个 **partial index**（注意是普通部分索引，不是唯一索引），把"哪些 session 值得被复用"这个集合高效地圈出来：
 
 ```prisma
 // prisma/schema.prisma（第 377 行）
-// partial unique index：
-// [sessionBindingKey, taskFingerprint, status, updatedAt]
-// WHERE claude_session_id IS NOT NULL AND status = 'completed'
-@@unique(
+// partial index（非唯一）：
+@@index(
   [sessionBindingKey, taskFingerprint, status, updatedAt],
-  // WHERE claude_session_id IS NOT NULL AND status = 'completed'
+  where: raw("(claude_session_id IS NOT NULL AND status = 'completed')")
 )
 ```
 
-这个 partial index 的含义是：**只有当一个任务成功完成了（status='completed'）并且有 session（claude_session_id IS NOT NULL），它的 (sessionBindingKey, taskFingerprint) 组合才是唯一的。**
+这个 partial index 的含义是：**只对"成功完成且带 session"的任务建索引**。系统想找一个可复用的 session 时，查这个部分索引就能快速命中，而不用全表扫、也不用过滤掉失败任务。
 
 换句话说：
 
-- 一个成功完成的任务，它的 session 被"锚定"了——下次用同样的 (sessionBindingKey, taskFingerprint) 来发起任务，系统能找到这个成功的 session 并复用。
-- 失败的任务、没 session 的任务，不参与这个唯一约束，不会错误地"占住"一个 session。
+- 一个成功完成的任务（status='completed' 且有 claude_session_id），它的 (sessionBindingKey, taskFingerprint) 进了这个索引——下次用同样的指纹来发起任务，系统能快速查到这个成功的 session 并复用。
+- 失败的任务、没 session 的任务，根本不进这个索引，既不占索引体积，也不会被误当作"可复用"候选。
 
-这是 partial index 的妙用——**只在特定条件下生效的唯一约束**，正好匹配"只复用成功 session"的业务语义。如果用普通 unique index，要么全锁（失败也占），要么不锁（成功了也复用不了），都对不上需求。
+注意这里是 **partial index 而非 partial unique index**——它**不强制唯一性**，作用是"圈定一个可高效查询的候选集合"，真正的"复不复用、复用哪个"的判断由应用层在查到候选后决定。这是个容易看错的细节：partial unique index 会"禁止重复"，而这里要的是"快速找到候选"，两者目的相反。**partial index + 应用层判断，比一个 unique 约束更贴合"只复用成功 session"的语义**——如果用 unique，反而会禁止两个成功任务共享同一指纹的合理场景。
 
 ---
 
@@ -188,7 +186,7 @@ WinMatrix 用一个 **partial unique index** 精确控制了"什么情况下可�
 
 除了四道防线，模型里还有两个字段值得提：
 
-- **`taskFingerprint`（任务指纹）**。对任务的输入（指令、参数、目标）算一个 hash。它和 partial unique index 一起，决定了"什么算同一个任务"。也用于事后排查——两个看似不同的指令如果 fingerprint 一样，说明它们逻辑上等价。
+- **`taskFingerprint`（任务指纹）**。对任务的输入（指令、参数、目标）算一个 hash。它和 partial index 一起，决定了"什么算同一个任务"（用于快速查可复用的成功 session）。也用于事后排查——两个看似不同的指令如果 fingerprint 一样，说明它们逻辑上等价。
 - **`lifecycleMetadata`（Json）**。生命周期里那些"杂七杂八但很重要"的元数据：派发时的时间戳、每次 attempt 的开始/结束、回调到达的原始 payload……因为格式不固定，用 Json 存。这是把"结构化字段 + 半结构化元数据"分层的常见做法——核心字段建索引查询，细节塞 Json 留痕。
 
 **经验：关键实体一定要有"留痕"字段。** 你不知道未来会出什么诡异问题，但出问题的时候，手里有没有元数据决定了你是一个小时查清还是三天查清。
@@ -204,7 +202,7 @@ WinMatrix 用一个 **partial unique index** 精确控制了"什么情况下可�
 | 幂等键（idempotency key） | 防重复提交 | `(workstationId, triggerTool, idempotencyKey)` running 态去重 |
 | 版本号/attempt 号 | 防过时覆盖 | `attemptNo` 单调递增，拒绝更小的写入 |
 | 一次性令牌（one-time token） | 防伪造回调 | `callbackTokenHash`，hash 存储，随 attempt 换发 |
-| partial unique index | 条件唯一 | 只对 completed+has_session 生效，精确控制 session 复用 |
+| partial index | 条件索引（非唯一） | 只对 completed+has_session 建索引，高效圈定可复用 session 候选 |
 | 单调状态机 | 防终态被回滚 | completed/failed 终态不接受写入 |
 
 这五种模式不是 WinMatrix 发明的，都是分布式系统的老套路。**值得说的是"把它们组合用"这件事本身**——很多系统只做了一两种（比如只加了个 idempotency key 就觉得幂等搞定了），结果上线后被迟到回调、被伪造回调、被过时覆盖各坑一次。**幂等不是一个开关，是一个体系。任何一种模式缺席，都会在某个边界场景爆雷。**
@@ -216,7 +214,7 @@ WinMatrix 用一个 **partial unique index** 精确控制了"什么情况下可�
 1. **幂等键只在 running 态去重，不是全局唯一**。终态的任务允许用相同参数重新发起，符合用户语义。幂等键的语义要和"这是同一次意图还是同一份参数"对齐。
 2. **attemptNo 单调递增，拒绝过时回调**。迟到的旧 attempt 回调不能覆盖新状态——这是分布式重试里最阴险的坑，用一个数字比较就能挡住。
 3. **回调令牌 hash 存储，随 attempt 换发**。双重保险：attemptNo 校验 + token 校验，任意一个失败都拒绝。防御深度，别假设任何一层绝对安全。
-4. **partial unique index 精确控制复用条件**。"只复用成功 session"用普通 unique index 做不到，partial index 正好匹配条件唯一的语义。
+4. **partial index 圈定可复用候选**。一个 partial index（非唯一）只对"成功完成且带 session"的任务建索引，让系统快速查到可复用的 session 候选；真正复不复用由应用层判断。注意它不是 unique 约束——目的是"快速找候选"而非"禁止重复"。
 5. **核心字段建索引，细节塞 Json 留痕**。taskFingerprint + lifecycleMetadata 这对组合，一个定身份一个存细节，是可观测性的标配。
 6. **幂等是体系不是开关**。idempotency key / attemptNo / callbackToken / partial index / 单调状态机，五种模式缺一不可。只做一两种的"幂等"，迟早会被边界场景打穿。
 7. **状态机只前进不后退**。终态不接受写入，连合法的重复回调都幂等丢弃。状态机越严格，系统越不容易被"特殊情况"搞乱。

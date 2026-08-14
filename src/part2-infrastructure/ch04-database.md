@@ -2,11 +2,11 @@
 
 > "数据是系统的血液，数据库是系统的心脏。"
 
-WinMatrix 的核心数据存储基于 PostgreSQL + Prisma 7，123 个模型覆盖了从数字员工到 Agent 执行记录、从知识库到工作流编排的完整业务域。但持久化层不仅仅是数据库表的映射——它包含了自动恢复的连接池、双层缓存架构、分布式锁、乐观锁并发控制和事务编排。本章将从 Schema 设计出发，逐步深入持久化层的工程细节。
+WinMatrix 的核心数据存储基于 PostgreSQL + Prisma 7，157 个模型覆盖了从数字员工到 Agent 执行记录、从知识库到工作流编排的完整业务域。但持久化层不仅仅是数据库表的映射——它包含了自动恢复的连接池、多级缓存架构、分布式锁、乐观锁并发控制和事务编排。本章将从 Schema 设计出发，逐步深入持久化层的工程细节。
 
-## 4.1 Prisma Schema：123 个模型的组织哲学
+## 4.1 Prisma Schema：157 个模型的组织哲学
 
-WinMatrix 的数据库 Schema 定义在 `prisma/schema.prisma`（3133 行）中，包含 123 个模型。这些模型按业务域可以划分为以下几个层次：
+WinMatrix 的数据库 Schema 定义在 `prisma/schema.prisma`（4065 行）中，包含 157 个模型。这些模型按业务域可以划分为以下几个层次：
 
 ### Generator 与 Datasource 配置
 
@@ -31,7 +31,7 @@ datasource db {
 
 ### 核心模型分类
 
-123 个模型按业务域组织如下：
+157 个模型按业务域组织如下：
 
 ```mermaid
 graph TB
@@ -151,10 +151,12 @@ model DigitalEmployee {
 - **Json 类型字段**：`workstationConfig` 和 `promptOverride` 使用 JSON 类型，存储半结构化配置
 - **索引策略**：只在高频查询字段上建索引（`roleId`、`status`）
 
-### 关键模型：AgentExecutionLog
+### 关键模型：AgentExecutionLog（已退役，留作条件索引教学）
+
+> **退役说明**：`AgentExecutionLog` 已在 `retire-agent-execution-log` 变更中退役，其 SSOT 职责由 `ExecutionSpan` + `ExecutionSpanEvent` 取代（见第 25 章）。schema.prisma 中已无此 model 定义。这里保留它作为**条件部分索引（partial index）**的经典教学案例——这个设计模式在 `PerformanceMetrics` 等其他模型上仍在使用。
 
 ```prisma
-// prisma/schema.prisma（第 11-75 行）
+// 历史 model AgentExecutionLog（已从 schema 移除，原第 11-75 行）
 model AgentExecutionLog {
   id                     String  @id
   sessionId              String  @map("session_id")
@@ -173,7 +175,7 @@ model AgentExecutionLog {
 }
 ```
 
-这个模型的关键在于**条件部分索引**——`partialIndexes` 特性的应用。只有 `decision_call_end`、`agent_call_end`、`agent_invoke_end` 三种事件类型才会被索引，大幅减少了索引体积，同时覆盖了最常见的统计查询场景。
+这个模型的关键在于**条件部分索引**——`partialIndexes` 特性的应用。只有 `decision_call_end`、`agent_call_end`、`agent_invoke_end` 三种事件类型才会被索引，大幅减少了索引体积，同时覆盖了最常见的统计查询场景。虽然模型本身已退役，但这个"按事件类型过滤的部分索引"模式，在需要高频统计查询的场景下依然值得借鉴。
 
 ### 关键模型：agent_run
 
@@ -786,7 +788,7 @@ scripts/seed-domain-packs.ts                    # 领域包种子
 
 本章深入分析了 WinMatrix 的数据库与持久化层：
 
-1. **Prisma Schema**：3133 行，123 个模型，按 10 个业务域组织，条件部分索引优化统计查询
+1. **Prisma Schema**：4065 行，157 个模型，按 10 个业务域组织，条件部分索引优化统计查询
 2. **自动恢复连接池**：474 行的 Prisma Client 封装，Proxy 代理 + Single-Flight 重建 + 时区 Bug 规避
 3. **45 个仓储实现**：Domain Port → Infrastructure Adapter，Prisma ORM + Raw SQL 混合
 4. **L1 + Redis 双层缓存**：进程内 Map → Redis → DB 三级穿透，优雅降级，跨节点 Pub/Sub 失效

@@ -84,13 +84,14 @@
 
 | 文件 | 职责 |
 |------|------|
-| `src/agents/core/agent/decision/DecisionEngine.ts` | 六阶段决策管线 |
+| `src/agents/core/agent/decision/DecisionEngine.ts` | 五阶段决策管线 SSOT |
+| `src/agents/core/agent/decision/architector/Architector.ts` | 决策入口编排器（单例 decide/decideRoute） |
 | `src/agents/core/agent/decision/createDecisionPipeline.ts` | 管线工厂 |
 | `src/agents/core/agent/decision/fusion-router.ts` | 融合路由算法 |
 | `src/agents/core/agent/decision/route-registry.ts` | 路由规则注册表 |
 | `src/agents/core/agent/decision/SemanticPlannerCache.ts` | 语义缓存 |
-| `src/agents/core/agent/decision/stages/ExactRouter.ts` | Stage 2 |
-| `src/agents/core/agent/decision/stages/DecisionPlanner.ts` | Stage 4（1090 行） |
+| `src/agents/core/agent/decision/stages/ExactRouter.ts` | Stage 1（精确路由 + PlanExtraction） |
+| `src/agents/core/agent/decision/stages/DecisionPlanner.ts` | Stage 4（LLM 规划） |
 
 ### Turn 执行
 
@@ -119,11 +120,11 @@
 | `src/agents/domain-harness/roles/SreManagerRole.ts` | 大维（运维） |
 | `src/agents/domain-harness/roles/QualityManagerRole.ts` | 小质（质量） |
 
-## L4.5 Business-Tools 工具层（29 域）
+## L4.5 Business-Tools 工具层（27 域）
 
 | 文件 | 职责 |
 |------|------|
-| `src/business-tools/autoRegister.ts` | 自动注册（25 模块懒加载） |
+| `src/business-tools/autoRegister.ts` | 自动注册（27 模块懒加载） |
 | `src/business-tools/base/BaseTool.ts` | 工具基类 |
 | `src/business-tools/base/interfaces.ts` | IToolRegistry 接口 |
 | `src/business-tools/wecom-contact/index.ts` | 企微联系人（3 工具） |

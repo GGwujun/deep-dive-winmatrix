@@ -1,6 +1,6 @@
 # 附录 A：术语表
 
-本附录收录本书中出现的 55+ 个核心术语，按拼音排序。
+本附录收录本书中出现的 60+ 个核心术语，按拼音排序。
 
 ## A
 
@@ -11,7 +11,7 @@
 能够自主感知、决策、行动的 AI 实体。WinMatrix 中指执行任务的数字员工运行时。
 
 **AgentExecutionLog（Agent 执行日志）**
-记录 Agent 执行过程的结构化日志，包含 trace ID、token 用量、耗时等。
+历史结构化执行日志表。**已退役**（retire-agent-execution-log），其 SSOT 职责由 `ExecutionSpan` + `ExecutionSpanEvent` 取代。
 
 **AgentRun（Agent 运行记录）**
 一次完整的 Agent 执行记录，包含意图、分解、编排计划、状态等。
@@ -50,10 +50,10 @@ LLM 消息的内容单元（TextBlock / ThinkingBlock / ToolCallBlock），支�
 ## D
 
 **DecisionEngine（决策引擎）**
-六阶段渐进式决策管线，决定由谁、用什么方式、执行什么。
+渐进式五阶段决策管线（ExactRouter+PlanExtraction → FusionRouter → QuickAcceptGate → DecisionPlanner → DecisionCommitmentDeriver），决定由谁、用什么方式、执行什么。SSOT 在 `agents/core/agent/decision/DecisionEngine.ts`，对外入口是 `architector/Architector.ts` 单例。
 
 **DecisionPlanner（决策规划器）**
-决策引擎第 4 阶段，使用 LLM 进行复杂决策（约 1090 行）。
+决策引擎第 4 阶段，使用 LLM 进行复杂决策。
 
 **DIContainer（依赖注入容器）**
 WinMatrix 自研的轻量 DI 容器（约 210 行），支持 Singleton/Transient 生命周期。
@@ -70,7 +70,7 @@ WinMatrix 的核心抽象，拥有角色、技能、工具、记忆的虚拟团�
 L1（进程内 Map）+ L3（Redis）双层缓存，支持跨节点 Pub/Sub 失效。
 
 **ExactRouter（精确路由器）**
-决策引擎第 2 阶段，处理 @mention、/slash、精确匹配。
+决策引擎第 1 阶段（与 SimpleChatGuard 闲聊守卫、PlanExtraction 同阶段），处理 @mention、/slash、精确匹配，零 LLM 成本。
 
 **ExecutionSpan（执行跨度）**
 可观测性的基本单元，记录一个操作的开始、结束、输入、输出。
@@ -81,7 +81,7 @@ L1（进程内 Map）+ L3（Redis）双层缓存，支持跨节点 Pub/Sub 失�
 安全原则，权限检查出错时拒绝访问（返回 false），而非放行。
 
 **FusionRouter（融合路由器）**
-决策引擎第 3 阶段，多信号加权融合（正则 0.9 + 意图 ±0.2/0.8 + 语义 0.6）。
+决策引擎第 2 阶段，基于 `route_rule` 表的多信号融合打分（正则命中最强，其次意图词，再次语义匹配）；支持 active 竞速与 shadow 影子规则（只记录不路由，用于 A/B 验证）。
 
 **Flow（流程）**
 可复用的多步骤工作流模板，支持版本管理和 DAG 执行。
@@ -226,4 +226,25 @@ Turn 执行的单一真实来源（SSOT），四阶段：load → admit → rout
 
 ## 其他
 
-**55+ 条术语**覆盖全书核心概念。
+本附录收录 60+ 条核心术语，覆盖全书核心概念。以下补充若干全书高频但易被忽略的术语：
+
+**L1/L2/L3（技能就绪边界）**
+技能就绪检查的三层：L1 决策阶段出能力清单（轻量）、L2 规划阶段 snapshot 软校验、L3 运行时 `SkillReadinessGate.check` 硬闸门。注意与决策引擎的分层路由 L0/L1/L2/L3 是两个不同维度。
+
+**LISTEN/NOTIFY（配置热更新）**
+PostgreSQL 的发布订阅机制，WinMatrix 用独立 `pg.Client` 监听 `config_change` 通道实现配置热更新（500ms 防抖 + Map 去重）。必须直连 PG，不能走 PgBouncer transaction-pool。
+
+**persona_eligible（分身技能可用性）**
+`skill_artifact` 字段，决定技能是否对数字分身默认继承。默认 true；false 表示不进 personal L1。背后是"分身同源继承、禁止平行实现"的防腐化原则。
+
+**QuickAcceptGate（快速接受门）**
+决策引擎第 3 阶段，含语义 planner cache pre-check——命中历史相似决策则跳过 Stage 4 的 LLM 规划。
+
+**role_inbox（角色持久收件箱）**
+交互式角色的持久化任务收件箱，带租约抢占（claim_owner/claim_expires_at）、重试（retry_count/max_retries）、幂等（idempotency_key）、轮次关联（turn_id）。入队策略：PG 先写 → BullMQ 投递。
+
+**StreamingToolExecutor（流式工具执行器）**
+LLM 工具调用循环的真实承载者（`agents/core/ai-execution/tool-loop/`），含三道终止闸门（迭代数、LLM 硬上限、单轮时间预算）与空 args 降级非流式补全。
+
+**Token Broker（令牌代理）**
+MCP 接入的统一鉴权入口，按 token 前缀路由三种令牌：PAT（`wm_pat_`，人-项目）、WMA（`wma_`，外部 Agent 注册）、WMEC（`wmec_`，外部接入方应用身份）。token 只存 SHA-256 hash。

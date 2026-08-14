@@ -10,15 +10,15 @@ WinMatrix 本质上是一个**AI 数字员工协作运行时**。在这里，AI 
 
 其核心能力包括：
 
-- **数字员工管理**：七大内置角色（大福/阿宁/小品/阿码/小质/大维/Architector），每个角色拥有独立的技能集、工具绑定和记忆空间
-- **渐进式决策引擎**：六阶段决策管线（SimpleChatGuard → ExactRouter → FusionRouter → DecisionPlanner → DecisionCommitmentDeriver → PipelineHook），实现从精确匹配到 LLM 规划的渐进路由
+- **数字员工管理**：八大角色（大福/阿宁/小品/阿码/小质/大维/Architector 七个内置 + external-agent 运行时动态生成），每个角色拥有独立的技能集、工具绑定和记忆空间
+- **渐进式决策引擎**：五阶段决策管线（ExactRouter+PlanExtraction → FusionRouter → QuickAcceptGate → DecisionPlanner → DecisionCommitmentDeriver），从精确匹配逐级走到 LLM 规划，每阶段可提前返回
 - **多 Agent 协作**：支持 interactive（轮流协作）、coordinator（多步编排）、react（单 Agent 推理）、skill（直接技能执行）、workstation（沙箱编码）五种执行模式
-- **五层记忆系统**：从 Working Memory（50 项）到 Long-term Memory（10000 项），支持向量检索与全文检索的混合查询
+- **三层记忆系统**：会话层（Redis 最近 50 条 + PG 永久）、转录层（PG session_transcript 含工具/思考轨迹）、长期索引层（PG memory_chunks + ES 向量），支持三区检索（当前会话/项目记忆/跨会话）与向量+全文混合查询
 - **技能治理体系**：30+ 内置技能，从文件定义到运行时加载，支持技能市场、角色绑定、项目白名单
-- **工具执行系统**：29 个业务工具域（document / project / task / TFS / WeChat / MCP / RAG / memory / workstation...），每个工具都有独立的权限检查和上下文管理
+- **工具执行系统**：27 个业务工具域（document / project / task / TFS / WeChat / MCP / RAG / memory / workstation...），每个工具都有独立的权限检查和上下文管理
 - **知识库与 RAG**：支持 PDF / Word / Excel / Markdown 文档摄入，Elasticsearch kNN 向量检索 + 全文检索
 - **多渠道集成**：企业微信 OAuth + 消息通道、MCP 协议（双向：Server + Consumer）、外部 Agent 协作
-- **可观测性**：全链路 Span 追踪、Agent 执行日志、API 审计、性能指标
+- **可观测性**：全链路 ExecutionSpan 追踪（retire-agent-execution-log 后的 SSOT）、LLM span 遥测、API 审计、性能指标
 
 从 `src/business/domain/digitalEmployee/` 的领域模型可以看到，数字员工不仅仅是一个配置项，而是一个完整的实体：
 
@@ -115,7 +115,7 @@ WinMatrix 没有选择单一数据库，而是根据数据特性选择了四种�
 
 | 存储引擎 | 用途 | 数据特性 |
 |---------|------|---------|
-| **PostgreSQL + Prisma 7** | 核心业务数据 | 121 个模型，强一致性事务 |
+| **PostgreSQL + Prisma 7** | 核心业务数据 | 157 个模型，强一致性事务 |
 | **Redis + BullMQ** | 缓存 + 任务队列 | 高速读写，分布式锁 |
 | **Elasticsearch 8** | 向量检索 + 全文搜索 | kNN 向量搜索，日志分析 |
 | **Neo4j** | 知识图谱 | 关系型数据，图遍历 |
@@ -242,7 +242,7 @@ src/
 │   ├── application/         #   dto / services / toolCall / utils
 │   └── domain/              #   agentExecution / conversation / digitalEmployee / project / task / ...
 │
-├── business-tools/          # 工具层（L4.5，29 个工具域）
+├── business-tools/          # 工具层（L4.5，27 个工具域）
 │   ├── document/ email/ image/ interaction/ kdocs/ knowledgeBase/
 │   ├── mcp/ member/ memory/ meta/ notification/ orchestration/
 │   ├── project/ rag/ scheduled/ session/ shared/ skill/ sql/
@@ -295,7 +295,7 @@ graph TB
     end
 
     subgraph "L4.5: Business-Tools 工具层"
-        BT["29 个工具域<br/>document/project/task/tfs/wecom/mcp/rag/memory..."]
+        BT["27 个工具域<br/>document/project/task/tfs/wecom/mcp/rag/memory..."]
     end
 
     subgraph "L5: Business 业务层"
@@ -437,7 +437,7 @@ sequenceDiagram
 当用户发送消息时，首先通过 REST API 提交，然后建立 WebSocket 连接用于流式通信：
 
 ```typescript
-// src/interface/api/workspace.ts（概念性）
+// src/interface/api/workspace.ts（示意）
 // POST /api/v1/workspace/conversation/:conversationId/message
 // 请求体：{ content: "启动新项目" }
 
@@ -450,7 +450,7 @@ sequenceDiagram
 Agent 层收到消息后，首先组装执行上下文：
 
 ```typescript
-// src/agents/core/ai-execution/turnRunner.ts（概念性）
+// src/agents/core/ai-execution/turnRunner.ts（示意）
 // TurnRunner 负责一次完整的 Turn 执行
 
 // 1. 加载对话历史（conversation_histories）
@@ -489,42 +489,43 @@ ToolExecutionContext（工具级：employee + project + permissions）
 
 ### 阶段 2：渐进式决策
 
-决策引擎是 WinMatrix 的核心创新。它不是简单地调用 LLM 决定"做什么"，而是通过六阶段管线渐进式地做出决策。从 `src/agents/core/agent/decision/DecisionEngine.ts` 可以看到完整的管线结构：
+决策引擎是 WinMatrix 的核心创新。它不是简单地调用 LLM 决定"做什么"，而是通过**五阶段管线**渐进式地做出决策，从最便宜的精确匹配逐级走到最贵的 LLM 规划，每个阶段都能"terminal 提前返回"。从 `src/agents/core/agent/decision/DecisionEngine.ts` 可以看到完整的管线结构（对外入口是 `architector/Architector.ts` 单例）：
 
 ```typescript
 // src/agents/core/agent/decision/DecisionEngine.ts
-// 六阶段决策管线
+// 五阶段决策管线（decideInner）
 
-// Stage 1: SimpleChatGuard — 简单问候短路
-// 如果消息是"你好"、"谢谢"等简单问候，直接返回预设回复，不调用 LLM
-const simpleGuard = await simpleChatGuard.evaluate(turnContext);
-if (simpleGuard.shouldShortCircuit) return simpleGuard.response;
+// Stage 1: ExactRouter + PlanExtraction（+ SimpleChatGuard 闲聊守卫）
+// 精确路由匹配（@mention、/slash、精确技能匹配）+ 闲聊短路（"你好"直接回复）
+// 零 LLM 成本
+const exactMatch = await this.exactRouter.routeAsync(input, resolvedTurn);
+const { candidate: chatCandidate } = await this.simpleChatGuard.extract(input, exactMatch, resolvedTurn);
+// 显式流程编排短路：用户明确描述多步流程时直接编译
+const explicitFlow = this.tryExplicitFlowOrchestrationPlan(...);
+if (explicitFlow?.terminal) return this.finalize(explicitFlow);
 
-// Stage 2: ExactRouter — 精确路由匹配
-// 如果消息完全匹配预定义的路由规则（@mention、/slash、精确技能/工具匹配），直接执行
-const exactMatch = await exactRouter.route(turnContext);
-if (exactMatch) return exactMatch;
+// Stage 2: FusionRouter — 多信号融合路由，产出候选
+// 综合正则匹配、意图关键词、语义相似度加权（active 规则竞速，shadow 规则只记录）
+const fusionResult = await this.fusionRouterStage.execute(...);
 
-// Stage 3: FusionRouterStage — 多信号融合路由
-// 综合正则匹配、意图关键词、语义相似度进行加权路由
-const fusionMatch = await fusionRouter.route(turnContext);
-if (fusionMatch && fusionMatch.score >= route.semanticThreshold) {
-  return fusionMatch;
+// Stage 3: QuickAcceptGate — 快速接受 + 语义缓存 pre-check
+// 命中历史相似决策则跳过 Stage 4 的 LLM 规划
+const coverageEval = await this.quickAcceptGate.evaluate(...,
+  { cacheLookup: (params) => this.lookupSemanticPlannerCache(...) });
+if (coverageEval.result.acceptedPlanPatch) {
+  return this.finalize(finalizeAcceptedPlan(...));   // 命中，跳过 LLM
 }
-// 如果分数低于阈值，继续交给 LLM 决策
 
-// Stage 4: DecisionPlanner — LLM 辅助规划（~1258 行）
-// 调用 LLM 进行复杂决策，使用 Zod Schema + tool calling，含重试机制
-const plan = await decisionPlanner.plan(turnContext);
+// Stage 4: DecisionPlanner — LLM 辅助规划
+// 只有三道短路都没拦住的长尾请求才走到这里
+const plan = await this.decisionPlanner.plan(...);
 
-// Stage 5: DecisionCommitmentDeriver — 确定性派生 ExecutionPlan
-// 将 LLM 的输出派生为确定性的执行计划
-const executionPlan = commitmentDeriver.derive(plan);
+// Stage 5: DecisionCommitmentDeriver — 派生可执行 ExecutionPlan
+// 校验 LLM 产出的 plan patch，只"承诺"校验通过的
+const executionPlan = await this.commitmentDeriver.derivePlan(...);
+return this.finalize(executionPlan);
 
-// Stage 6: PipelineHook 链 — 横切关注点处理
-// 6 个 Hook：Audit / Feedback / Progress / CapabilitySnapshot / DecisionEvent / StageTrace
-await pipelineHooks.finalize(executionPlan);
-return executionPlan;
+// 注：PipelineHook（Audit/StageTrace 等）是横切的观测钩子，贯穿所有阶段，不是独立的 Stage。
 ```
 
 ### 融合路由算法
@@ -612,7 +613,7 @@ routes:
 决策完成后，系统调用对应的业务工具。每个工具执行都要经过权限检查和上下文注入：
 
 ```typescript
-// src/business-tools/project/projectKickoffTool.ts（概念性）
+// src/business-tools/project/projectKickoffTool.ts（示意）
 export class ProjectKickoffTool {
   async execute(
     input: ProjectKickoffInput,
@@ -673,7 +674,7 @@ type StreamingMessage =
 对话完成后，系统会异步提取有价值的信息存入长期记忆：
 
 ```typescript
-// src/interface/workers/memorySyncWorker.ts（概念性）
+// src/interface/workers/memorySyncWorker.ts（示意）
 // BullMQ Worker 异步处理
 
 export async function processMemorySync(job: Job<MemorySyncData>) {
@@ -706,6 +707,6 @@ export async function processMemorySync(job: Job<MemorySyncData>) {
 1. **产品本质**：不是简单的 AI 聊天工具，而是一个完整的 AI 数字员工协作运行时，让 AI 作为团队成员参与项目全流程
 2. **技术选型逻辑**：Fastify 的高性能和插件体系支撑了复杂的中间件管线；多数据库混合存储策略根据数据特性选择最合适的引擎；进程角色拆分实现了资源隔离和独立扩缩容
 3. **六层架构**：从 Interface 到 Infrastructure，每一层有明确的职责边界和严格的单向依赖规则
-4. **数据流特征**：六阶段渐进式决策管线 + 语义缓存 + 流式输出 + 异步记忆同步，实现了性能、质量和用户体验的平衡
+4. **数据流特征**：五阶段渐进式决策管线 + 语义缓存 + 流式输出 + 异步记忆同步，实现了性能、质量和用户体验的平衡
 
 在接下来的章节中，我们将深入每一层的实现细节，从启动流程开始。

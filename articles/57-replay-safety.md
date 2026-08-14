@@ -16,22 +16,27 @@
 
 上一篇讲过，Prisma Proxy 遇到可恢复错误会 single-flight 重建连接池，然后**对只读方法自动重放一次**。现在要回答的关键问题是：**怎么判断"只读"？**
 
-WinMatrix 用的是一个**显式白名单**（`shouldReplayAfterPrismaRebuild`，`client.ts:288-303`，核实报告 ch04-06）：
+WinMatrix 用的是一个**显式白名单**（`shouldReplayAfterPrismaRebuild`，`client.ts:289-301`，核实报告 ch04-06）：
 
 ```
-可重放的白名单（9 种只读方法）：
-  findMany / findFirst / findUnique / aggregate / count / groupBy
-  $queryRaw / $queryRawUnsafe / $executeRaw（仅 SELECT 语义）
+可重放的白名单（11 种只读方法）：
+  findMany / findFirst / findFirstOrThrow
+  findUnique / findUniqueOrThrow
+  aggregate / count / groupBy
+  $queryRaw / $queryRawUnsafe
+  $connect
 
-不可重放（写方法）：
+不可重放（写方法，一律排除）：
   create / createMany / update / updateMany / upsert / delete / deleteMany
-  $executeRaw（INSERT/UPDATE/DELETE） / $executeRawUnsafe
+  $executeRaw / $executeRawUnsafe    ← 注意：raw 执行方法不在白名单，哪怕是 SELECT 语义也不重放
   $transaction
 ```
 
+注意一个容易想当然的细节：**`$executeRaw` / `$executeRawUnsafe` 不在白名单里**，哪怕你写的是一条 `SELECT`。原因是框架无法静态判断一段 raw SQL 的语义（它可能是 `SELECT ... FOR UPDATE`、带副作用 CTE、甚至 `INSERT ... RETURNING`），只能一刀切排除。如果你有"只读 raw SQL"想要重放，得走 `$queryRaw` 这条被白名单认可的路径。这正是白名单"保守优先"的体现。
+
 为什么用显式白名单而不是"分析 SQL 判断是不是 SELECT"？这是个看似可以自动化、实则不能的设计。原因是：
 
-**第一，白名单是保守的，自动化是激进的。** 白名单只重放确认安全的 9 种方法，其他一律不重放（即使某些写操作理论上幂等）。这是 fail-closed——宁可少重放，绝不错重放。自动化判断 SQL 会遇到各种边界（带 RETURNING 的 INSERT、CTE 里的 UPDATE、触发器副作用），一旦判断错，就是数据错误。
+**第一，白名单是保守的，自动化是激进的。** 白名单只重放确认安全的 11 种方法，其他一律不重放（即使某些写操作理论上幂等）。这是 fail-closed——宁可少重放，绝不错重放。自动化判断 SQL 会遇到各种边界（带 RETURNING 的 INSERT、CTE 里的 UPDATE、触发器副作用），一旦判断错，就是数据错误。
 
 **第二，写操作的幂等性是业务决定的，不是框架能判断的。** `updateMany({ where: { status: 'pending' }, data: { status: 'done' } })` 这个操作幂等吗？取决于业务——如果"done"是终态，重试无害；如果"done"会触发副作用（比如发通知），重试就是重复通知。框架没法知道，只有业务知道。所以框架的选择是：**写操作一律不自动重放，让业务层自己决定。**
 
@@ -145,7 +150,7 @@ crossAgentTriggerWorker 与 scheduled-agent 共享 getScheduledAgentSemFromEnv
 **第二步：操作是只读/幂等的，还是写的/不幂等的？**
 - 只读或确认幂等 → 可以自动重试。
 - 写且不幂等 → 不能自动重试，让业务层处理。
-- WinMatrix 用 `shouldReplayAfterPrismaRebuild` 白名单（9 种只读方法），写方法一律不重放。
+- WinMatrix 用 `shouldReplayAfterPrismaRebuild` 白名单（11 种只读方法，`$executeRaw` 即使是 SELECT 也不在内），写方法一律不重放。
 
 **第三步：重试的"成本"可控吗？**
 - 重试次数有限（1-2 次）→ 可以。
@@ -159,7 +164,7 @@ crossAgentTriggerWorker 与 scheduled-agent 共享 getScheduledAgentSemFromEnv
 ## 给后来者的总结
 
 1. **重试是否安全，不取决于错误类型，而取决于操作性质。** 错误瞬时性 × 操作幂等性 = 重试安全性。两个都满足才能自动重试。
-2. **只读操作是幂等的最强形式，怎么重试都安全。** Prisma 重放白名单只放 9 种只读方法（findMany/findFirst/aggregate/count/$queryRaw 等），这是最保守也最安全的策略。
+2. **只读操作是幂等的最强形式，怎么重试都安全。** Prisma 重放白名单只放 11 种只读方法（findMany/findFirst/findUnique/aggregate/count/groupBy/$queryRaw 等，`$executeRaw` 即使 SELECT 语义也不放），这是最保守也最安全的策略。
 3. **写操作不要自动重试。** 写操作的幂等性是业务决定的（参考第 23 篇 5 种幂等形态），框架不能越俎代庖。Prisma Proxy 对写方法一律抛错，让业务层自己决定。
 4. **用显式白名单，不要自动分析 SQL 判断只读。** 白名单保守但安全（fail-closed），自动判断激进且会踩到各种边界（RETURNING、CTE、触发器）。
 5. **区分"重试"和"重投"。** 瞬时错误用有限重试（BullMQ attempts:2），资源不足用延迟重投（moveToDelayed + DelayedError）。两者配合，不要混用。

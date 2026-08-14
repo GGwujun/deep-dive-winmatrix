@@ -66,7 +66,7 @@ WinMatrix 里至少有四个独立模块，各自长出了"强制收敛"的机�
 收敛机制（`infrastructure/scheduled/llmCallWatchdogSweeper.ts:1-53`）：
 
 ```ts
-export const LLM_CALL_WATCHDOG_SWEEPER_TASK_NAME = 'system-llm-call-watchdog-sweeper';
+export const LLM_CALL_WATCHDOG_TASK_NAME = 'system-llm-call-watchdog-sweeper';
 function resolveSweepThresholdMs(): number {
   const hardMs = getConfig().llmCallHardTimeoutMs;
   return hardMs > 0 ? hardMs * 2 : 360_000;  // 2x hard timeout 或 6 分钟

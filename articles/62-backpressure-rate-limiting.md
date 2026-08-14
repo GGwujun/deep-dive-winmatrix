@@ -224,7 +224,7 @@ export function getScheduledAgentSemFromEnv(): ScheduledAgentConcurrencySemaphor
 
 信号量满了怎么办？这是 AI 平台过载控制跟传统限流最大的区别——**不拒绝、不丢弃，而是延迟重投**。
 
-worker 消费 job 时的逻辑（`scheduledTaskWorker.ts:1261-1279`，核实报告 ch23-29）：
+worker 消费 job 时的逻辑（`crossAgentTriggerWorker.ts:1261-1279`，核实报告 ch23-29）：
 
 ```ts
 const acquired = await agentSem.tryAcquire(String(job.id));

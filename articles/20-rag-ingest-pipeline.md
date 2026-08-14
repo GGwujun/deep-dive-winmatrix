@@ -56,7 +56,7 @@
 pipeline 的入口先做两件事：大小校验和哈希去重。
 
 ```typescript
-// src/infrastructure/rag/RagService.ts（ingestBufferDetailed，第 192-200 行）
+// src/infrastructure/rag/RagService.ts（ingestBufferDetailed，第 178-189 行）
 if (buffer.length > ragIngestConfig.maxBytes) {
   throw new Error(
     `文件大小 (${(buffer.length / 1024 / 1024).toFixed(1)} MB) 超过限制 (${(ragIngestConfig.maxBytes / 1024 / 1024).toFixed(0)} MB)`,
@@ -111,7 +111,7 @@ const EXCEL_SEPARATORS = ['\n', '|', '\t', ','];
 而在 pipeline 里，分隔符的选择逻辑是：**用户自定义 > 文档类型默认**：
 
 ```typescript
-// RagService.ts（第 222-228 行）
+// RagService.ts（第 209-213 行）
 let separators = kbChunkingCfg?.splitMarkers;        // 用户在知识库配置里自定义
 if (!separators) {
   separators = getSeparatorsByType(parseResult.documentType);  // 按文档类型默认
@@ -169,11 +169,11 @@ const ABSOLUTE_MAX_CHUNK_SIZE = 7500;
 WinMatrix 的分块有两种模式，由知识库配置决定：
 
 ```typescript
-// RagService.ts（第 246-248 行）
+// RagService.ts（第 215-216 行）
 const chunkingMode = options.chunkingMode
   ?? (kbChunkingCfg?.parentChildEnabled ? 'parent_child' : 'flat');
 
-// RagService.ts（第 268-285 行）
+// RagService.ts（第 231-257 行）
 const buildChunks = async () =>
   chunkingMode === 'parent_child'
     ? (await chunkDocumentParentChildAsync(

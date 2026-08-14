@@ -125,10 +125,10 @@ Redis 连接矩阵有 6 条（`RedisConnectionManager.ts`，128 行）：
 
 LLM 是 WinMatrix 最不可控的基础设施——它是外部 API，可能超时、半途失败、甚至"假装在跑实际没响应"。LLM 调用一旦悬挂，会拖垮整条对话链路。
 
-WinMatrix 的做法是**悬挂检测 + 补偿收敛**（`infrastructure/scheduled/llmCallWatchdogSweeper.ts`，53 行）：
+WinMatrix 的做法是**悬挂检测 + 补偿收敛**（`infrastructure/scheduled/llmCallWatchdogSweeper.ts`）：
 
 ```ts
-export const LLM_CALL_WATCHDOG_SWEEPER_TASK_NAME = 'system-llm-call-watchdog-sweeper';
+export const LLM_CALL_WATCHDOG_TASK_NAME = 'system-llm-call-watchdog-sweeper';
 
 function resolveSweepThresholdMs(): number {
   const hardMs = getConfig().llmCallHardTimeoutMs;

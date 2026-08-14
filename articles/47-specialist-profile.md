@@ -17,13 +17,14 @@
 七大业务角色在启动时被注册进 RoleRegistry（`startup/agents.ts:126-133`）：
 
 ```ts
+roleRegistry.registerFactory('architect', () => new ArchitectRole());            // 注意 architect 在首位
 roleRegistry.registerFactory('orchestrator', () => new OrchestratorRole());
 roleRegistry.registerFactory('process_manager', () => new ProcessManagerRole());
 roleRegistry.registerFactory('product_design_manager', () => new ProductDesignRole());
 roleRegistry.registerFactory('tech_manager', () => new TechManagerRole());
 roleRegistry.registerFactory('sre_manager', () => new SreManagerRole());
 roleRegistry.registerFactory('quality_manager', () => new QualityManagerRole());
-roleRegistry.registerFactory('architect', () => new ArchitectRole());
+Architector.initialize();                                                        // 系统内核 Architector 单例初始化
 ```
 
 每个 Role 实现类的构造器里，从 `agent_config` 表加载自己的身份四件套——`name/profile/goal/constraints`（`agents/domain-harness/roles/TechManagerRole.ts:35-49`）：

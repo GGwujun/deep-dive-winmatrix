@@ -202,7 +202,7 @@ WinMatrix 的 span events 完美满足这三条——读（调试）和写/分�
 
 讲这么多原理，最后落到一个真实场景：调试一次 LLM 调用失败，到底读哪个源？
 
-LLM 调用按契约（`openspec/contracts/llm-call-span-telemetry-contract.md`）会产生三类事件：`llm_call_start`（含完整 request）、`llm_call_end`（含 response 和 token 数）、`llm_call_error`（含 errorMessage）。
+LLM 调用按遥测契约（代码里以 `llm-call-span-telemetry-contract` 概念名被引用，实现在 `llmObservability.ts`）会产生三类事件：`llm_call_start`（含完整 request）、`llm_call_end`（含 response 和 token 数）、`llm_call_error`（含 errorMessage）。
 
 ```
 调试场景 1: 看"这次 LLM 调用整体怎么样"

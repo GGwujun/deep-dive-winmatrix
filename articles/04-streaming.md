@@ -159,7 +159,7 @@ export interface StreamEvent<T> {
   type: string;
   runId: string;
   seq: number;              // ← 关键：per-conversation 递增的序列号
-  conversationId: string;
+  conversationId?: string;
   parentTaskId?: string;
   targetChannels?: string[];
   ts: number;

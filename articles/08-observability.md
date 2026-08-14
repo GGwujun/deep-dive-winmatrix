@@ -171,7 +171,7 @@ AI 平台的可观测性，有一个传统后端没有的特殊诉求——**LLM
 
 每次 LLM 调用花多少钱（多少 token）、用的什么模型、为什么调用，必须可查。否则月底 API 账单来了，你不知道钱花哪了，更不知道哪个技能/哪个员工是"烧钱大户"。
 
-我们有一份专门的 LLM Span 遥测契约（`openspec/contracts/llm-call-span-telemetry-contract.md`），规定了每次 LLM 调用必须记录的事件：
+我们有一套专门的 LLM Span 遥测契约（代码里以 `llm-call-span-telemetry-contract` 这个概念名被引用，散落在 `llmObservability.ts` 等处的注释与实现里），规定了每次 LLM 调用必须记录的事件：
 
 | 时机 | 事件 | 必填字段 |
 |------|------|---------|
